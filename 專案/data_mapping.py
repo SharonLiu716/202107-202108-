@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 import sys
 import torch 
 from torch.utils.data import Dataset,DataLoader
-from data_loader import Dataset_monthly, get_path, get_data
+from data_loader import Dataset_monthly, get_path, get_data, update_raw_column
 '''
 Child:用來補上現有data沒有的child description
 Defect:defect type的mapping table
@@ -50,7 +50,7 @@ class AddColumns():
         self.action = action
         self.version = version
         self.key1,self.key2 = self.PartKey(self.mapping_dict['Part Type'])        
-        self.updated=self.Merge(self.DF,self.mapping_dict['Part Type'],self.mapping_dict['Defect Type'],self.mapping_dict['Product Type'],self.merge_columns)
+        self.updated=self.Merge(self.DF,self.mapping_dict['Child'],self.mapping_dict['Part Type'],self.mapping_dict['Defect Type'],self.mapping_dict['Product Type'],self.merge_columns)
         
         
     #從mapping table 分出key word 分為1個字和兩個字的list跟PART MAP
@@ -67,7 +67,7 @@ class AddColumns():
 
 #取料號四碼+key word
     def PartMapping(self,DF,PART,KEY1,KEY2):
-
+        
         DF['料號前四碼'],DF['Key Word']='',''
         #取料號四碼+keyword
         DF['PART_NO']=DF['PART_NO'].fillna('-1').astype(str)
@@ -100,7 +100,9 @@ class AddColumns():
         DF = DF.merge(temp, how = 'left',on = column)
         return DF
 
-    def Merge(self,DF,Part,Defect,Product,merge_columns):
+    def Merge(self,DF,CHILD,Part,Defect,Product,merge_columns):
+        #根據Part_No新增child description
+        DF= pd.merge(DF, CHILD, how='left')
         #新增欄位：PART_TYPE、DEFECT_TYPE、PRODUCT TYPE
         DF=self.PartMapping(DF, Part, self.key1, self.key2)
         DF = pd.merge(DF, Defect, how='left')
@@ -109,7 +111,8 @@ class AddColumns():
         DF=self.DefectGroup(DF,merge_columns)
         return DF
 
-    
+
+        
 '''待修
     if action == "delete":
         def Abnormal(DF,ABNORMAL):
@@ -122,6 +125,30 @@ class AddColumns():
             #匯入defect type 不會用到的 Parts type_20210518檢查異常資料(待補)
 
             return DF,AB1,AB2
+
+class Split():
+    def __init__(self, DF, list_of_RC,merge_columns,action = "mainRC"):
+        # data_version: original: monthly raw data from RQ, updated: 經過欄位縮短&變換
+        self.DF = DF                
+        self.list_of_RC = list_of_RC
+        self.action = action        
+        self.mainRC_df = self. mainRC(self.DF,self.list_of_RC)        
+        self.updated=self.Merge(self.DF,self.mapping_dict['Part Type'],self.mapping_dict['Defect Type'],self.mapping_dict['Product Type'],self.merge_columns)
+        
+    def mainRC(self,DF,list_of_RC):
+        if self.version=='mainRC':
+            DF=DF[DF['RC_ID'].isin(list_of_RC)]
+            
+    def Abnormal(DF,ABNORMAL):
+            #刪除PART+keyword對不到parttype的data
+            Ab1=DF[(DF['料號前四碼'].notna() & DF['Key Word'].notna()) & (DF['PART_TYPE'].isna())]
+            DF=DF.drop(Ab1.index)
+            #刪除no defect卻有用料的data
+            Ab2=DF[(DF['SYMPTOM']=='No Defect') & (DF['PART_NO'].notna())]
+            DF=DF.drop(Ab2.index)
+            #匯入defect type 不會用到的 Parts type_20210518檢查異常資料(待補)
+
+            return DF,AB1,AB2 
 '''
 
 #=================================================================
@@ -135,14 +162,13 @@ data_loader=Dataset_monthly(data_path[0],data_path[1], data_version = "updated",
 mapping_dict='C:\\Users\\yihsuan.liu\\Documents\\RQ物料資料清理\\repair-parts\\Mapping Tables.xlsx'
 merge_columns=['SERIAL_NO','month_year']
 mainRC=['ACCU','UPLUS','EASCON','IGS','SMM','TGO','ZZHC']
+output_path=path+'\\final'
 for k in range(len(data_loader)):
     sys.stdout.write('\rReading : '+data_path[1][k])
     df = data_loader[k]
     df=AddColumns(DF=df, mapping_dict=mapping_dict,merge_columns=merge_columns).updated
-    #mainRC_df=df[df['RC_ID'].isin(mainRC)]
-    savepath = os.path.join(os.getcwd(),'test .xlsx') # 設定路徑及檔名data_path[1][k]+
-    writer = pd.ExcelWriter(savepath, engine='openpyxl') # 指定引擎openpyxl
-    df.to_excel(writer, sheet_name='Sheet1',index=False) # 存取加完欄位的df
+    df.to_excel(output_path+'\\{}.xlsx'.format(data_path[1][k]), engine='openpyxl', encoding='utf_8_sig')
+    
+    #mainRC_df=df[df['RC_ID'].isin(mainRC)]     
     #df.groupby(by=['RC_ID','SERIAL_NO','month_year']).to_excel(writer, sheet_name='Group')
-    writer.save()
-    writer.close()
+

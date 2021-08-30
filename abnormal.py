@@ -18,7 +18,8 @@ df=pd.read_excel(path+'map data V1\\202007.xlsx')
 Abnormal=pd.read_excel(path+'repair-parts\\Abnormal.xlsx')
 Part=pd.read_excel(path+'repair-parts\\Mapping Tables.xlsx',sheet_name='Part Type')
 part_type=Part.groupby('維修效益物料類別')
-parts=[]
+keys,parts=[],[]
+
 for part in list(set(Part['維修效益物料類別'])):
     tmp=','.join(Part.groupby('維修效益物料類別').get_group(part)['PART_TYPE'].unique().tolist())
     parts.append(tmp)
@@ -30,8 +31,23 @@ Abnormal=Abnormal.merge(df, on='維修效益物料類別')
 Abnormal.to_excel('Abnormal.xlsx',index=False)
 
 
+for defect in set(Abnormal['Defect_Type']):
+    keys.append(defect)
+    tmp=Abnormal.groupby('Defect_Type').get_group(defect)['PART_TYPE'].unique().tolist()
+    parts.append(tmp)
+dict_of_abnormal=dict(zip(keys, parts))
+pd.concat([pd.DataFrame(list(set(Abnormal['Defect_Type'])),columns=['Defect_Type']),pd.DataFrame(parts,columns=['PART_TYPE'])],axis=1)
+for defect in dict_of_abnormal.keys():
+    test=df.query('Defect_Type==defect' and 'PART_TYPE in @dict_of_abnormal[defect]',inplace=False)
+
+list_of_keys = [key
+                for key, list_of_values in word_freq.items()
+                if value in list_of_values]
 
 
+dict_of_abnormal['CELL'].item()
+if 'FPC' in dict_of_abnormal['CELL']:
+    print('yes')
 class Split():
     def __init__(self, DF, list_of_RC,merge_columns,action = "mainRC"):
         # data_version: original: monthly raw data from RQ, updated: 經過欄位縮短&變換
@@ -39,7 +55,7 @@ class Split():
         self.list_of_RC = list_of_RC
         self.action = action        
         self.mainRC_df = self. mainRC(self.DF,self.list_of_RC)        
-        self.updated=self.Merge(self.DF,self.mapping_dict['Part Type'],self.mapping_dict['Defect Type'],self.mapping_dict['Product Type'],self.merge_columns)
+        self.dict_of_abnormal=self.dict_of_abnormal(self.mapping_dict['Abnormal'])
         
     def mainRC(self,DF,list_of_RC):
         if self.version=='mainRC':
